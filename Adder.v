@@ -24,8 +24,8 @@ module Adder(
             E2 = B[30:23];
             F1 = A[22:0];
             F2 = B[22:0];
-            M1 = {1'b1, F1};  // 암묵적인 1 추가
-            M2 = {1'b1, F2};  // 암묵적인 1 추가
+            M1 = {1'b1, F1};
+            M2 = {1'b1, F2};
         end
 
         // 지수 차이를 조정하여 가수 정렬
@@ -68,20 +68,20 @@ module Adder(
         // 라운딩 처리
         begin
             case (round_mode)
-                2'b00: begin // Round towards zero
-                    // No additional rounding needed, truncation already done
+                2'b11: begin // Round towards zero
+                    M_sum = M_sum + 1;
                 end
-                2'b01: begin // Round towards nearest even
+                2'b10: begin // Round towards nearest even
                     if (M_sum[0] && (M_sum[1] || |M_sum[22:1])) begin
                         M_sum = M_sum + 1;
                     end
                 end
-                2'b10: begin // Round towards +∞
+                2'b00: begin // Round towards +∞
                     if (S_result == 0 && M_sum[0]) begin
                         M_sum = M_sum + 1;
                     end
                 end
-                2'b11: begin // Round towards -∞
+                2'b01: begin // Round towards -∞
                     if (S_result == 1 && M_sum[0]) begin
                         M_sum = M_sum + 1;
                     end
