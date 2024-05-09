@@ -5,31 +5,51 @@ module FPU(
     input start,
     output reg error, overflow,
     output reg [31:0] Y
-
 );
 
-    wire [31:0] tempResult;
+    wire [31:0] resultAdd, resultSub, resultMul, resultDiv;
+    wire errorAdd, overflowAdd, errorSub, overflowSub, errorMul, overflowMul, errorDiv, overflowDiv;
 
-    //A와 B의 연산을 수행
+    // 연산 모듈 인스턴스화
+    Adder        add0(A, B, errorAdd, overflowAdd, resultAdd);
+    Subtractor   sub0(A, B, errorSub, overflowSub, resultSub);
+    Multiplier   mul0(A, B, errorMul, overflowMul, resultMul);
+    Divider      div0(A, B, errorDiv, overflowDiv, resultDiv);
+
+    // 결과 처리 블록
     always @(posedge clk or posedge reset) begin
-        if (reset) begin    //리셋이 있을 때 결과 값들 초기화
+        if (reset) begin
             error <= 0;
             overflow <= 0;
             Y <= 0;
-        end
-        else if(start) begin //시작이 있을 때 연산 수행
+        end else if(start) begin
             case (sel)
-                2'b00: Adder        Add0(A, B, round_mode, error, overflow, tempResult);
-                2'b01: Subtractor   Sub0(A, B, round_mode, error, overflow, tempResult);
-                2'b10: Multiplier   Mul0(A, B, round_mode, error, overflow, tempResult);
-                2'b11: Divider      Div0(A, B, round_mode, error, overflow, tempResult);
-                default: 
+                2'b00: begin
+                    Y <= resultAdd;
+                    error <= errorAdd;
+                    overflow <= overflowAdd;
+                end
+                2'b01: begin
+                    Y <= resultSub;
+                    error <= errorSub;
+                    overflow <= overflowSub;
+                end
+                2'b10: begin
+                    Y <= resultMul;
+                    error <= errorMul;
+                    overflow <= overflowMul;
+                end
+                2'b11: begin
+                    Y <= resultDiv;
+                    error <= errorDiv;
+                    overflow <= overflowDiv;
+                end
+                default: begin
+                    Y <= Y;
+                    error <= error;
+                    overflow <= overflow;
+                end
             endcase
-        end 
-        else begin
-            error <= error;
-            overflow <= overflow;
-            Y <= Y;
         end
     end
 
