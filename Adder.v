@@ -11,11 +11,12 @@ module Adder(
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
-    reg [24:0] M_sum; // 가수합 결과를 위한 레지스터 (overflow를 위해 하나 더 추가)
-    reg carry; // 덧셈에서의 캐리 비트
+    reg [24:0] M_sum; // 25-bit 가수 결과 (오버플로 처리 포함)
+    reg carry; // 덧셈 결과의 캐리
     integer shift;
 
-    always @(*) begin
+    always @* begin
+        // 입력 신호 분해
         begin
             S1 = A[31];
             S2 = B[31];
@@ -23,10 +24,12 @@ module Adder(
             E2 = B[30:23];
             F1 = A[22:0];
             F2 = B[22:0];
-            M1 = {1'b1, F1}; // Implicit leading one
-            M2 = {1'b1, F2}; // Implicit leading one
+            M1 = {1'b1, F1};  // 암묵적인 1 추가
+            M2 = {1'b1, F2};  // 암묵적인 1 추가
+        end
 
-            // 지수 차이 조정
+        // 지수 차이를 조정하여 가수 정렬
+        begin
             if (E1 > E2) begin
                 shift = E1 - E2;
                 M2 = M2 >> shift;
@@ -38,7 +41,7 @@ module Adder(
             end
         end
 
-        // 가수 덧셈
+        // 가수 덧셈 또는 뺄셈
         begin
             if (S1 == S2) begin
                 {carry, M_sum} = M1 + M2;
@@ -60,8 +63,10 @@ module Adder(
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
+        end
 
-            // 라운딩 처리
+        // 라운딩 처리
+        begin
             case (round_mode)
                 2'b00: begin // Round towards zero
                     // No additional rounding needed, truncation already done
@@ -82,18 +87,22 @@ module Adder(
                     end
                 end
             endcase
+        end
 
+        // 라운딩 후 추가 정규화
+        begin
             if (M_sum[24]) begin
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
         end
 
-        // 오버플로우 체크
+        // 결과 오버플로우 및 에러 처리
         begin
             if (E_result >= 255) begin
                 overflowAdd = 1;
                 errorAdd = 1;
+                resultAdd = {S_result, 8'hFF, 23'h0};  // 오버플로 발생 시 최대 값 설정
             end else begin
                 overflowAdd = 0;
                 errorAdd = 0;
