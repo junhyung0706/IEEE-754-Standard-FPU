@@ -11,25 +11,55 @@ module Adder(
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
-    reg [24:0] M_sum; // 25-bit 가수 결과 (오버플로 처리 포함)
-    reg carry; // 덧셈 결과의 캐리
+    reg [24:0] M_sum; // 25-bit mantissa result (includes overflow handling)
+    reg carry; // carry from the addition
     integer shift;
 
     always @ (*) begin
-        // 입력 신호 분해
-        begin
-            S1 = A[31];
-            S2 = B[31];
-            E1 = A[30:23];
-            E2 = B[30:23];
-            F1 = A[22:0];
-            F2 = B[22:0];
-            M1 = {1'b1, F1};  // Implicit leading one
-            M2 = {1'b1, F2};  // Implicit leading one
-        end
+        // Decode input signals
+        S1 = A[31];
+        S2 = B[31];
+        E1 = A[30:23];
+        E2 = B[30:23];
+        F1 = A[22:0];
+        F2 = B[22:0];
 
-        // 지수 차이를 조정하여 가수 정렬
-        begin
+        // 예외처리
+        if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin // 입력에서 NaN 혹은 무한대 발생 시
+            if (E1 == 8'b1111_1111 && F1 != 0) begin    // A가 NaN인 경우, A의 NaN 값을 전파
+                resultAdd = A;
+                errorAdd = 1;
+                overflowAdd = 0;
+            end else if (E2 == 8'b1111_1111 && F2 != 0) begin   // B가 NaN인 경우, B의 NaN 값을 전파
+                resultAdd = B;
+                errorAdd = 1;
+                overflowAdd = 0;
+            end else if (E1 == 8'b1111_1111 && E2 == 8'b1111_1111) begin // A와 B 모두 무한대일 때
+                if (S1 != S2) begin // 부호가 서로 다를 경우, 결과는 NaN
+                    resultAdd = {1'b0, 8'b1111_1111, 23'h400000}; // 표준 NaN 출력
+                    errorAdd = 1;
+                    overflowAdd = 0;
+                end else begin  // 부호가 같을 경우, 같은 부호의 무한대를 전파
+                    resultAdd = A; // 같은 부호의 무한대 전파
+                    errorAdd = 0;
+                    overflowAdd = 0;
+                end
+            end else if (E1 == 8'b1111_1111) begin  // A만 무한대인 경우, A의 무한대 값을 전파
+                resultAdd = A;
+                errorAdd = 0;
+                overflowAdd = 0;
+            end else begin  // B만 무한대인 경우, B의 무한대 값을 전파
+                resultAdd = B;
+                errorAdd = 0;
+                overflowAdd = 0;
+            end
+        end else begin
+            // 정규 수 계산: 묵시적인 선행 1을 가진 가수 계산
+            M1 = {1'b1, F1};
+            M2 = {1'b1, F2};
+
+
+            // Align mantissas based on exponent difference
             if (E1 > E2) begin
                 shift = E1 - E2;
                 M2 = M2 >> shift;
@@ -39,10 +69,8 @@ module Adder(
                 M1 = M1 >> shift;
                 E_result = E2;
             end
-        end
 
-        // 가수 덧셈 또는 뺄셈
-        begin
+            // Perform addition or subtraction of mantissas
             if (S1 == S2) begin
                 {carry, M_sum} = M1 + M2;
                 S_result = S1;
@@ -55,56 +83,37 @@ module Adder(
                     S_result = S2;
                 end
             end
-        end
 
-        // 정규화 및 라운딩 로직
-        begin
+            // Normalize and handle rounding
             if (M_sum[24]) begin
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
-        end
 
-        // 라운딩 처리
-        begin
+            // Rounding logic based on rounding mode
             case (round_mode)
-                2'b00: begin // Round towards +∞
-                    if (S_result == 0 && M_sum[0]) M_sum = M_sum + 1;  // If positive, increment to round up
-                end
-                2'b01: begin // Round towards -∞
-                    if (S_result == 1 && M_sum[0]) M_sum = M_sum + 1;  // If negative, increment to make less negative
-                end
-                2'b10: begin // Round ties to even
-                    if (M_sum[0]) begin
-                        if (M_sum[1] || |M_sum[22:2]) M_sum = M_sum + 1;  // Check if we need to round up
-                    end
-                end
-                2'b11: begin // Round ties away from zero
-                    if (M_sum[0]) M_sum = M_sum + 1;  // Always round away from zero
-                end
+                2'b00: if (S_result == 0 && M_sum[0]) M_sum = M_sum + 1;
+                2'b01: if (S_result == 1 && M_sum[0]) M_sum = M_sum + 1;
+                2'b10: if (M_sum[0] && (M_sum[1] || |M_sum[22:1])) M_sum = M_sum + 1;
+                2'b11: if (M_sum[0]) M_sum = M_sum + 1;
             endcase
-        end
 
-        // 라운딩 후 추가 정규화
-        begin
+            // Final normalization
             if (M_sum[24]) begin
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
-        end
 
-        // 결과 오버플로우 및 에러 처리
-        begin
+            // Final overflow and error handling
             if (E_result >= 255) begin
+                resultAdd = {S_result, 8'hFF, 23'h0}; // Set to max value on overflow
                 overflowAdd = 1;
                 errorAdd = 1;
-                resultAdd = {S_result, 8'hFF, 23'h0};  // 오버플로 발생 시 최대 값 설정
             end else begin
+                resultAdd = {S_result, E_result[7:0], M_sum[22:0]};
                 overflowAdd = 0;
                 errorAdd = 0;
-                resultAdd = {S_result, E_result[7:0], M_sum[22:0]};
             end
         end
     end
-
 endmodule
