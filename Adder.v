@@ -15,7 +15,7 @@ module Adder(
     reg carry; // 덧셈 결과의 캐리
     integer shift;
 
-    always @* begin
+    always @ (*) begin
         // 입력 신호 분해
         begin
             S1 = A[31];
@@ -24,8 +24,8 @@ module Adder(
             E2 = B[30:23];
             F1 = A[22:0];
             F2 = B[22:0];
-            M1 = {1'b1, F1};
-            M2 = {1'b1, F2};
+            M1 = {1'b1, F1};  // Implicit leading one
+            M2 = {1'b1, F2};  // Implicit leading one
         end
 
         // 지수 차이를 조정하여 가수 정렬
@@ -68,23 +68,19 @@ module Adder(
         // 라운딩 처리
         begin
             case (round_mode)
-                2'b11: begin // Round towards zero
-                    M_sum = M_sum + 1;
-                end
-                2'b10: begin // Round towards nearest even
-                    if (M_sum[0] && (M_sum[1] || |M_sum[22:1])) begin
-                        M_sum = M_sum + 1;
-                    end
-                end
                 2'b00: begin // Round towards +∞
-                    if (S_result == 0 && M_sum[0]) begin
-                        M_sum = M_sum + 1;
-                    end
+                    if (S_result == 0 && M_sum[0]) M_sum = M_sum + 1;  // If positive, increment to round up
                 end
                 2'b01: begin // Round towards -∞
-                    if (S_result == 1 && M_sum[0]) begin
-                        M_sum = M_sum + 1;
+                    if (S_result == 1 && M_sum[0]) M_sum = M_sum + 1;  // If negative, increment to make less negative
+                end
+                2'b10: begin // Round ties to even
+                    if (M_sum[0]) begin
+                        if (M_sum[1] || |M_sum[22:2]) M_sum = M_sum + 1;  // Check if we need to round up
                     end
+                end
+                2'b11: begin // Round ties away from zero
+                    if (M_sum[0]) M_sum = M_sum + 1;  // Always round away from zero
                 end
             endcase
         end
