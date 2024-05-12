@@ -11,7 +11,7 @@ module Adder(
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
-    reg [24:0] M_sum; // 25-bit mantissa result (includes overflow handling)
+    reg [24:0] M_sum; // 25비트 mantissa result (includes overflow handling)
     reg carry; // carry from the addition
     integer shift;
 
@@ -59,7 +59,7 @@ module Adder(
             M2 = {1'b1, F2};
 
 
-            // Align mantissas based on exponent difference
+            // 지수차를 기준으로 만티사 정렬
             if (E1 > E2) begin
                 shift = E1 - E2;
                 M2 = M2 >> shift;
@@ -70,7 +70,7 @@ module Adder(
                 E_result = E2;
             end
 
-            // Perform addition or subtraction of mantissas
+            // 만티사의 더하고 빼기
             if (S1 == S2) begin
                 {carry, M_sum} = M1 + M2;
                 S_result = S1;
@@ -84,13 +84,13 @@ module Adder(
                 end
             end
 
-            // Normalize and handle rounding
+            // 정규화 및 반올림 처리
             if (M_sum[24]) begin
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
 
-            // Rounding logic based on rounding mode
+            // 반올림 모드 기반 반올림 로직
             case (round_mode)
                 2'b00: if (S_result == 0 && M_sum[0]) M_sum = M_sum + 1;
                 2'b01: if (S_result == 1 && M_sum[0]) M_sum = M_sum + 1;
@@ -98,13 +98,13 @@ module Adder(
                 2'b11: if (M_sum[0]) M_sum = M_sum + 1;
             endcase
 
-            // Final normalization
+            // 최종정규화
             if (M_sum[24]) begin
                 M_sum = M_sum >> 1;
                 E_result = E_result + 1;
             end
 
-            // Final overflow and error handling
+            // 최종 오버플로 및 오류 처리
             if (E_result >= 255) begin
                 resultAdd = {S_result, 8'hFF, 23'h0}; // Set to max value on overflow
                 overflowAdd = 1;
