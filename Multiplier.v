@@ -25,68 +25,73 @@ module Multiplier (
 
         S_result = S1 ^ S2;
 
-        // 예외처리
-        if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin // 입력에서 NaN 혹은 무한대 발생 시
-            if (E1 == 8'b1111_1111 && F1 != 0) begin    // A가 NaN인 경우, A의 NaN 값을 전파
-                resultMul = A;
-                errorMul = 1;
-                overflowMul = 0;
-            end else if (E2 == 8'b1111_1111 && F2 != 0) begin   // B가 NaN인 경우, B의 NaN 값을 전파
-                resultMul = B;
-                errorMul = 1;
-                overflowMul = 0;
-            end else if (E1 == 8'b1111_1111) begin  // A만 무한대인 경우, A의 무한대 값을 전파
-                resultMul = A;
-                errorMul = 0;
-                overflowMul = 1;
-            end else if (E2 == 8'b1111_1111) begin  // B만 무한대인 경우, B의 무한대 값을 전파
-                resultMul = B;
-                errorMul = 0;
-                overflowMul = 1;
-            end else if (E1 == 8'b1111_1111 && E2 == 8'b0000_0000 && F2 == 23'b0000_0000_0000_0000_0000_000) begin // A와 B가 무한대일 때 B와 A가 0
-                resultMul = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000};
-                errorMul = 1;
-                overflowMul = 0;
-            end
+        // Exception handling
+        if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin
+            // If either input is NaN or Infinity, propagate it
+            resultMul = ((F1 != 0) || (F2 != 0)) ? {1'b0, 8'hFF, 23'h400000} : {S_result, 8'hFF, 23'b0}; // Nan or Infinity
+            errorMul = (F1 != 0) || (F2 != 0);
+            overflowMul = (E1 == 8'hFF) && (E2 == 8'hFF);
         end else begin
-            // 정규 수 계산: 묵시적인 선행 1을 가진 가수 계산
-            M1 = {1'b1, F1};
+            // Normal multiplication process
+            M1 = {1'b1, F1};  // Include the implicit leading one
             M2 = {1'b1, F2};
 
-
-            // 지수부를 더해준다
-            E_result = E1 + E2;
-
-            // 만티사의 곱셈
+            // Multiply mantissas
             M_mul = M1 * M2;
 
-            // 정규화 및 반올림 처리
-            if (M_mul[47]) begin
-                M_mul = M_mul >> 1;
-                E_result = E_result + 1;
-            end
+            // Calculate new exponent
+            E_result = E1 + E2 - 127 + 1;  // Adjust the exponent for bias
 
+            // Normalize the product
+            shift = 0;
+            while (M_mul[47] == 0 && shift < 47) begin
+                M_mul = M_mul << 1;
+                shift = shift + 1;
+            end
+            E_result = E_result - shift;
+
+            // Extract the upper 24 bits as the result mantissa
             M_mul_24bit = M_mul[47:24];
 
-            // 반올림 모드 기반 반올림 로직
-            case (round_mode)
-                2'b00: if (S_result == 0 && M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
-                2'b01: if (S_result == 1 && M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
-                2'b10: if (M_mul_24bit[0] && (M_mul_24bit[1] || |M_mul_24bit[22:1])) M_mul_24bit = M_mul_24bit + 1;
-                2'b11: if (M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
-            endcase
+            // 라운딩 처리
+            begin
+                case (round_mode)
+                    2'b11: begin // Round towards zero
+                        M_mul_24bit = M_mul_24bit + 1;
+                    end
+                    2'b10: begin // Round towards nearest even
+                        if (M_mul_24bit[0] && (M_mul_24bit[1] || |M_mul_24bit[22:1])) begin
+                            M_mul_24bit = M_mul_24bit + 1;
+                        end
+                    end
+                    2'b00: begin // Round towards +∞
+                        if (S_result == 0 && M_mul_24bit[0]) begin
+                            M_mul_24bit = M_mul_24bit + 1;
+                        end
+                    end
+                    2'b01: begin // Round towards -∞
+                        if (S_result == 1 && M_mul_24bit[0]) begin
+                            M_mul_24bit = M_mul_24bit + 1;
+                        end
+                    end
+                endcase
+            end
 
-            // 최종정규화
+            // Additional normalization if rounding causes overflow
             if (M_mul_24bit[23]) begin
                 M_mul_24bit = M_mul_24bit >> 1;
                 E_result = E_result + 1;
             end
 
-            // 최종 오버플로 및 오류 처리
+            // Final check for overflow and underflow
             if (E_result >= 255) begin
-                resultMul = {S_result, 8'hFF, 23'h0}; // Set to max value on overflow
+                resultMul = {S_result, 8'hFF, 23'h0}; // Overflow, set to infinity
                 overflowMul = 1;
                 errorMul = 1;
+            end else if (E_result <= 0) begin
+                resultMul = {S_result, 8'h00, 23'h0}; // Underflow, set to zero
+                overflowMul = 0;
+                errorMul = 0;
             end else begin
                 resultMul = {S_result, E_result[7:0], M_mul_24bit[22:0]};
                 overflowMul = 0;
