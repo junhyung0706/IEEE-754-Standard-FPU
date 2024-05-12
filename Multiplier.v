@@ -41,8 +41,8 @@ module Multiplier (
                 overflowMul = 1;
             end else if (E2 == 8'b1111_1111) begin  // B만 무한대인 경우, B의 무한대 값을 전파
                 resultMul = B;
-                errorMul = 1;
-                overflowMul = 0;
+                errorMul = 0;
+                overflowMul = 1;
             end else if (E1 == 8'b1111_1111 && E2 == 8'b0000_0000 && F2 == 23'b0000_0000_0000_0000_0000_000) begin // A와 B가 무한대일 때 B와 A가 0
                 resultMul = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000};
                 errorMul = 1;
