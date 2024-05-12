@@ -6,12 +6,12 @@ module Multiplier (
     output reg overflowMul,
     output reg [31:0] resultMul
 );
-    reg S1, S2;
-    reg S_result = S1 ^ S2;
+    reg S1, S2, S_result;
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
     reg [47:0] M_mul;
+    reg [23:0] M_mul_24bit;
     integer shift;
 
     always @ (*) begin
@@ -22,6 +22,8 @@ module Multiplier (
         E2 = B[30:23];
         F1 = A[22:0];
         F2 = B[22:0];
+
+        S_result = S1 ^ S2;
 
         // 예외처리
         if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin // 입력에서 NaN 혹은 무한대 발생 시
@@ -37,7 +39,7 @@ module Multiplier (
                 resultMul = A;
                 errorMul = 0;
                 overflowMul = 1;
-            end else begin  // B만 무한대인 경우, B의 무한대 값을 전파
+            end else if (E2 == 8'b1111_1111) begin  // B만 무한대인 경우, B의 무한대 값을 전파
                 resultMul = B;
                 errorMul = 1;
                 overflowMul = 0;
@@ -64,29 +66,31 @@ module Multiplier (
                 E_result = E_result + 1;
             end
 
+            M_mul_24bit = M_mul[47:24];
+
             // 반올림 모드 기반 반올림 로직
             case (round_mode)
-                2'b00: if (S_result == 0 && M_sum[0]) M_sum = M_sum + 1;
-                2'b01: if (S_result == 1 && M_sum[0]) M_sum = M_sum + 1;
-                2'b10: if (M_sum[0] && (M_sum[1] || |M_sum[22:1])) M_sum = M_sum + 1;
-                2'b11: if (M_sum[0]) M_sum = M_sum + 1;
+                2'b00: if (S_result == 0 && M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
+                2'b01: if (S_result == 1 && M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
+                2'b10: if (M_mul_24bit[0] && (M_mul_24bit[1] || |M_mul_24bit[22:1])) M_mul_24bit = M_mul_24bit + 1;
+                2'b11: if (M_mul_24bit[0]) M_mul_24bit = M_mul_24bit + 1;
             endcase
 
             // 최종정규화
-            if (M_mul[47]) begin
-                M_mul = M_mul >> 1;
+            if (M_mul_24bit[23]) begin
+                M_mul_24bit = M_mul_24bit >> 1;
                 E_result = E_result + 1;
             end
 
             // 최종 오버플로 및 오류 처리
             if (E_result >= 255) begin
-                resultAdd = {S_result, 8'hFF, 23'h0}; // Set to max value on overflow
-                overflowAdd = 1;
-                errorAdd = 1;
+                resultMul = {S_result, 8'hFF, 23'h0}; // Set to max value on overflow
+                overflowMul = 1;
+                errorMul = 1;
             end else begin
-                resultAdd = {S_result, E_result[7:0], M_sum[46:24]};
-                overflowAdd = 0;
-                errorAdd = 0;
+                resultMul = {S_result, E_result[7:0], M_mul_24bit[22:0]};
+                overflowMul = 0;
+                errorMul = 0;
             end
         end
     end
