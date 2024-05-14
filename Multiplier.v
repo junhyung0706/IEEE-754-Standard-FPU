@@ -102,7 +102,7 @@ module Multiplier (
                 overflowMul = 0;
                 errorMul = 0;
             end else begin
-                resultMul = {S_result, E_result[7:0], M_mul_25bit[23:1]};
+                resultMul = {S_result, E_result[7:0], M_mul_25bit[22:0]};
                 overflowMul = 0;
                 errorMul = 0;
             end
