@@ -77,11 +77,11 @@ module Multiplier (
                 endcase
             end
 
-            // Additional normalization if rounding causes overflow
-            if (M_mul_24bit[23]) begin
-                M_mul_24bit = M_mul_24bit >> 1;
-                E_result = E_result + 1;
-            end
+//             Additional normalization if rounding causes overflow
+//            if (M_mul_24bit[23]) begin
+//                M_mul_24bit = M_mul_24bit >> 1;
+//                E_result = E_result + 1;
+//            end
 
             // Final check for overflow and underflow
             if (E_result >= 255) begin
