@@ -26,11 +26,17 @@ module Multiplier (
         S_result = S1 ^ S2;
 
         // Exception handling
-        if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin
-            // If either input is NaN or Infinity, propagate it
-            resultMul = ((F1 != 0) || (F2 != 0)) ? {1'b0, 8'hFF, 23'h400000} : {S_result, 8'hFF, 23'b0}; // NaN or Infinity
-            errorMul = (F1 != 0) || (F2 != 0);
-            overflowMul = (E1 == 8'hFF) && (E2 == 8'hFF);
+        //A가 무한, B는 0일 때 출력은 NaN
+        if (E1 == 8'b1111_1111 && F1 == 23'b000_0000_0000_0000_0000_0000 && E2 == 8'b0000_0000 && F2 == 23'b000_0000_0000_0000_0000_0000) begin
+            resultMul = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000};
+            overflowMul = 0;
+            errorMul = 1;
+        end
+        //A가 0, B는 무한일 때 출력은 NaN
+        else if (E1 == 8'b0000_0000 && F1 == 23'b000_0000_0000_0000_0000_0000 && E2 == 8'b1111_1111 && F2 == 23'b000_0000_0000_0000_0000_0000) begin
+            resultMul = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000};
+            overflowMul = 0;
+            errorMul = 1;
         end else begin
             // Normal multiplication process
             M1 = {1'b1, F1};  // Include the implicit leading one
@@ -51,25 +57,30 @@ module Multiplier (
             E_result = E_result - shift;
 
             // Extract the upper 24 bits as the result mantissa
-            M_mul_25bit = M_mul[47:23];
+            M_mul_25bit = {1'b0, M_mul[47:24]}; //최상위 비트는 오버플로우 검출용, 최하위비트는 반올림용
 
             // 라운딩 처리
             case (round_mode)
-                2'b11: begin // Round towards zero
-                    // No rounding needed for round towards zero
-                end
-                2'b10: begin // Round towards nearest even
-                    if (M_mul[22] && (M_mul[21] || |M_mul[20:0])) begin
-                        M_mul_25bit = M_mul_25bit + 1;
-                    end
-                end
                 2'b00: begin // Round towards +∞
-                    if (S_result == 0 && (M_mul[22] && |M_mul[21:0])) begin
+                    if (S_result == 0 && M_mul_25bit == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
                 end
                 2'b01: begin // Round towards -∞
-                    if (S_result == 1 && (M_mul[22] && |M_mul[21:0])) begin
+                    if (S_result == 1 && M_mul_25bit == 1) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
+                end
+                2'b10: begin // Round towards nearest even
+                    if (M_mul_25bit[1:0] == 2'b11) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
+                end
+                2'b11: begin // Rounding ties away from zero
+                    if (S_result == 0 && M_mul_25bit == 1) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
+                    else if (S_result == 1 && M_mul_25bit == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
                 end
