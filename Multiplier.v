@@ -37,13 +37,21 @@ module Multiplier (
             M2 = {1'b1, F2};
 
             // Multiply mantissas
-            M_mul = M1 * M2; // 49비트고 49번째는 오버플로우 확인용
+            M_mul = M1 * M2; // 48비트 곱셈 결과
 
             // Calculate new exponent
             E_result = E1 + E2 - 127;  // Adjust the exponent for bias
 
+            // Normalize the product
+            shift = 0;
+            while (M_mul[47] == 0 && shift < 24) begin
+                M_mul = M_mul << 1;
+                shift = shift + 1;
+            end
+            E_result = E_result - shift;
+
             // Extract the upper 24 bits as the result mantissa
-            M_mul_25bit = {1'b0, M_mul[47:24]};
+            M_mul_25bit = M_mul[47:23];
 
             // 라운딩 처리
             case (round_mode)
@@ -83,7 +91,7 @@ module Multiplier (
                 overflowMul = 0;
                 errorMul = 0;
             end else begin
-                resultMul = {S_result, E_result[7:0], M_mul_25bit[23:1]};
+                resultMul = {S_result, E_result[7:0], M_mul_25bit[22:0]};
                 overflowMul = 0;
                 errorMul = 0;
             end
