@@ -62,12 +62,12 @@ module Multiplier (
             // 라운딩 처리
             case (round_mode)
                 2'b00: begin // Round towards +∞
-                    if (S_result == 0 && M_mul_25bit == 1) begin
+                    if (S_result == 0 && M_mul_25bit[0] == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
                 end
                 2'b01: begin // Round towards -∞
-                    if (S_result == 1 && M_mul_25bit == 1) begin
+                    if (S_result == 1 && M_mul_25bit[0] == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
                 end
@@ -77,10 +77,10 @@ module Multiplier (
                     end
                 end
                 2'b11: begin // Rounding ties away from zero
-                    if (S_result == 0 && M_mul_25bit == 1) begin
+                    if (S_result == 0 && M_mul_25bit[0] == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
-                    else if (S_result == 1 && M_mul_25bit == 1) begin
+                    else if (S_result == 1 && M_mul_25bit[0] == 1) begin
                         M_mul_25bit = M_mul_25bit + 1;
                     end
                 end
