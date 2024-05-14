@@ -10,8 +10,8 @@ module Multiplier (
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
-    reg [48:0] M_mul;
-    reg [23:0] M_mul_24bit;
+    reg [47:0] M_mul;
+    reg [24:0] M_mul_25bit;
     integer shift;
 
     always @ (*) begin
@@ -42,42 +42,28 @@ module Multiplier (
             // Calculate new exponent
             E_result = E1 + E2 - 127;  // Adjust the exponent for bias
 
-            // Normalize the product
-            if (M_mul[48]) begin
-                M_mul = M_mul >> 1;
-                E_result = E_result + 1;
-            end
-
             // Extract the upper 24 bits as the result mantissa
-            M_mul_24bit = {1'b0, M_mul[48:26]};
+            M_mul_25bit = {1'b0, M_mul[47:24]};
 
             // 라운딩 처리
             case (round_mode)
                 2'b11: begin // Round towards zero
-                    if (M_mul[23]) begin
-                        M_mul_24bit = M_mul_24bit + 1;
-                    end
+                    
                 end
                 2'b10: begin // Round towards nearest even
-                    if (M_mul[23] && (M_mul[22] || |M_mul[21:0])) begin
-                        M_mul_24bit = M_mul_24bit + 1;
-                    end
+                    
                 end
                 2'b00: begin // Round towards +∞
-                    if (S_result == 0 && M_mul[23]) begin
-                        M_mul_24bit = M_mul_24bit + 1;
-                    end
+                    
                 end
                 2'b01: begin // Round towards -∞
-                    if (S_result == 1 && M_mul[23]) begin
-                        M_mul_24bit = M_mul_24bit + 1;
-                    end
+                    
                 end
             endcase
 
             // Check for overflow due to rounding
-            if (M_mul_24bit[23]) begin
-                M_mul_24bit = M_mul_24bit >> 1;
+            if (M_mul_25bit[24]) begin
+                M_mul_25bit = M_mul_25bit >> 1;
                 E_result = E_result + 1;
             end
 
@@ -91,7 +77,7 @@ module Multiplier (
                 overflowMul = 0;
                 errorMul = 0;
             end else begin
-                resultMul = {S_result, E_result[7:0], M_mul_24bit[22:0]};
+                resultMul = {S_result, E_result[7:0], M_mul_25bit[23:1]};
                 overflowMul = 0;
                 errorMul = 0;
             end
