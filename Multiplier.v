@@ -37,7 +37,7 @@ module Multiplier (
             M2 = {1'b1, F2};
 
             // Multiply mantissas
-            M_mul = M1 * M2; //50비트고 50번째는 오버플로우 확인용, 0번째는 반올림용
+            M_mul = M1 * M2; //49비트고 49번째는 오버플로우 확인용
 
             // Calculate new exponent
             E_result = E1 + E2 - 127;  // Adjust the exponent for bias
