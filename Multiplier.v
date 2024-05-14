@@ -10,7 +10,7 @@ module Multiplier (
     reg [7:0] E1, E2, E_result;
     reg [22:0] F1, F2;
     reg [23:0] M1, M2;
-    reg [47:0] M_mul;
+    reg [48:0] M_mul;
     reg [23:0] M_mul_24bit;
     integer shift;
 
@@ -28,7 +28,7 @@ module Multiplier (
         // Exception handling
         if ((E1 == 8'b1111_1111) || (E2 == 8'b1111_1111)) begin
             // If either input is NaN or Infinity, propagate it
-            resultMul = ((F1 != 0) || (F2 != 0)) ? {1'b0, 8'hFF, 23'h400000} : {S_result, 8'hFF, 23'b0}; // Nan or Infinity
+            resultMul = ((F1 != 0) || (F2 != 0)) ? {1'b0, 8'hFF, 23'h400000} : {S_result, 8'hFF, 23'b0}; // NaN or Infinity
             errorMul = (F1 != 0) || (F2 != 0);
             overflowMul = (E1 == 8'hFF) && (E2 == 8'hFF);
         end else begin
@@ -37,51 +37,50 @@ module Multiplier (
             M2 = {1'b1, F2};
 
             // Multiply mantissas
+            M_mul = 0;
             M_mul = M1 * M2;
 
             // Calculate new exponent
             E_result = E1 + E2 - 127 + 1;  // Adjust the exponent for bias
 
             // Normalize the product
-            shift = 0;
-            while (M_mul[47] == 0 && shift < 47) begin
-                M_mul = M_mul << 1;
-                shift = shift + 1;
+            if (M_mul[48]) begin
+                M_mul = M_mul >> 1;
+                E_result = E_result + 1;
             end
-            E_result = E_result - shift;
 
             // Extract the upper 24 bits as the result mantissa
-            M_mul_24bit = M_mul[47:24];
+            M_mul_24bit = {1'b0, M_mul[47:25]};
 
             // 라운딩 처리
-            begin
-                case (round_mode)
-                    2'b11: begin // Round towards zero
+            case (round_mode)
+                2'b11: begin // Round towards zero
+                    if (M_mul[23]) begin
                         M_mul_24bit = M_mul_24bit + 1;
                     end
-                    2'b10: begin // Round towards nearest even
-                        if (M_mul_24bit[0] && (M_mul_24bit[1] || |M_mul_24bit[22:1])) begin
-                            M_mul_24bit = M_mul_24bit + 1;
-                        end
+                end
+                2'b10: begin // Round towards nearest even
+                    if (M_mul[23] && (M_mul[22] || |M_mul[21:0])) begin
+                        M_mul_24bit = M_mul_24bit + 1;
                     end
-                    2'b00: begin // Round towards +∞
-                        if (S_result == 0 && M_mul_24bit[0]) begin
-                            M_mul_24bit = M_mul_24bit + 1;
-                        end
+                end
+                2'b00: begin // Round towards +∞
+                    if (S_result == 0 && M_mul[23]) begin
+                        M_mul_24bit = M_mul_24bit + 1;
                     end
-                    2'b01: begin // Round towards -∞
-                        if (S_result == 1 && M_mul_24bit[0]) begin
-                            M_mul_24bit = M_mul_24bit + 1;
-                        end
+                end
+                2'b01: begin // Round towards -∞
+                    if (S_result == 1 && M_mul[23]) begin
+                        M_mul_24bit = M_mul_24bit + 1;
                     end
-                endcase
-            end
+                end
+            endcase
 
-//             Additional normalization if rounding causes overflow
-//            if (M_mul_24bit[23]) begin
-//                M_mul_24bit = M_mul_24bit >> 1;
-//                E_result = E_result + 1;
-//            end
+            // Check for overflow due to rounding
+            if (M_mul_24bit[23]) begin
+                M_mul_24bit = M_mul_24bit >> 1;
+                E_result = E_result + 1;
+            end
 
             // Final check for overflow and underflow
             if (E_result >= 255) begin
