@@ -37,7 +37,7 @@ module Multiplier (
             M2 = {1'b1, F2};
 
             // Multiply mantissas
-            M_mul = M1 * M2; //49비트고 49번째는 오버플로우 확인용
+            M_mul = M1 * M2; // 49비트고 49번째는 오버플로우 확인용
 
             // Calculate new exponent
             E_result = E1 + E2 - 127;  // Adjust the exponent for bias
@@ -48,16 +48,22 @@ module Multiplier (
             // 라운딩 처리
             case (round_mode)
                 2'b11: begin // Round towards zero
-                    
+                    // No rounding needed for round towards zero
                 end
                 2'b10: begin // Round towards nearest even
-                    
+                    if (M_mul[22] && (M_mul[21] || |M_mul[20:0])) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
                 end
                 2'b00: begin // Round towards +∞
-                    
+                    if (S_result == 0 && (M_mul[22] && |M_mul[21:0])) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
                 end
                 2'b01: begin // Round towards -∞
-                    
+                    if (S_result == 1 && (M_mul[22] && |M_mul[21:0])) begin
+                        M_mul_25bit = M_mul_25bit + 1;
+                    end
                 end
             endcase
 
