@@ -46,7 +46,7 @@ module Multiplier (
             M_mul = M1 * M2; // 48비트 곱셈 결과
 
             // Calculate new exponent
-            E_result = E1 + E2 - 127;  // Adjust the exponent for bias
+            E_result = E1 + E2 - 127 + 1;  // Adjust the exponent for bias
 
             // Normalize the product
             shift = 0;
