@@ -12,6 +12,7 @@ module Divider (
     reg [23:0] M1, M2;
     reg [47:0] M1_ext, M2_ext, M_div_ext;
     reg [23:0] M_div;
+    reg [24:0] M_Div_25bit;
     integer shift_count;
 
     always @ (*) begin
@@ -55,15 +56,16 @@ module Divider (
             M2_ext = M2;
             M_div_ext = M1_ext / M2_ext;
             M_div = M_div_ext[23:0]; // Truncate to 24 bits
-
-            // Normalization and rounding
+            
             shift_count = 0;
-            while (M_div[23] == 0 && E_result > 0) begin
+            while (M_div[23] == 0 && shift_count < 24) begin
                 M_div = M_div << 1;
-                E_result = E_result - 1;
                 shift_count = shift_count + 1;
             end
-
+            E_result = E_result - shift_count;
+            
+            M_Div_25bit = {1'b0, M_div}; //최상위 비트는 오버플로우 검출용, 최하위비트는 module Divider
+            
             // Rounding logic based on rounding mode
             case (round_mode)
                 2'b00: if (M_div_ext[23]) M_div = M_div + 1; // Round to nearest even
@@ -73,8 +75,8 @@ module Divider (
             endcase
 
             // Final normalization
-            if (M_div[23]) begin
-                M_div = M_div >> 1;
+            if (M_Div_25bit[24]) begin
+                M_Div_25bit = M_Div_25bit >> 1;
                 E_result = E_result + 1;
             end
 
@@ -88,7 +90,7 @@ module Divider (
                 overflowDiv = 0;
                 errorDiv = 0;
             end else begin
-                resultDiv = {S_result, E_result[7:0], M_div[22:0]};
+                resultDiv = {S_result, E_result[7:0], M_Div_25bit[22:0]};
                 overflowDiv = 0;
                 errorDiv = 0;
             end
