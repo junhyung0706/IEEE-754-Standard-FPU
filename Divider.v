@@ -27,26 +27,25 @@ module Divider (
         S_result = S1 ^ S2;
 
         // Exception handling
-        // Division by zero = NaN
-        if (E2 == 8'b0000_0000 && F2 == 23'b0000_0000_0000_0000_0000_000) begin
+        // 0 / 0은 NaN
+        if (E1 == 8'b0000_0000 && F1 == 23'b0000_0000_0000_0000_0000_000 && E2 == 8'b0000_0000 && F2 == 23'b0000_0000_0000_0000_0000_000) begin
             resultDiv = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000}; // NaN
             errorDiv = 1;
             overflowDiv = 0;
-        // Both A and B are infinity
+        // 무한 / 무한 = NaN
         end else if (E1 == 8'b1111_1111 && E2 == 8'b1111_1111 && F1 == 23'b000_0000_0000_0000_0000_0000 && F2 == 23'b000_0000_0000_0000_0000_0000) begin 
             resultDiv = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000}; // NaN
             errorDiv = 1;
             overflowDiv = 0;
-        // Other infinities or NaNs
-        end else if ((E1 == 8'b1111_1111 && F1 != 23'b000_0000_0000_0000_0000_0000) || 
-                     (E2 == 8'b1111_1111 && F2 != 23'b000_0000_0000_0000_0000_0000)) begin
-            resultDiv = {S_result, 8'b1111_1111, 23'b100_0000_0000_0000_0000_0000}; // NaN
-            errorDiv = 1;
-            overflowDiv = 0;
+        // 0으로 나누면 무한
+        end else if (E2 == 8'b1111_1111 && F2 == 23'b000_0000_0000_0000_0000_0000) begin
+            resultDiv = {S_result, 8'b1111_1111, 23'b000_0000_0000_0000_0000_0000};
+            errorDiv = 0;
+            overflowDiv = 1;
         end else begin
             // Normalized number calculation: calculate mantissas with implicit leading 1
-            M1 = (E1 == 8'b0000_0000) ? {1'b0, F1} : {1'b1, F1};
-            M2 = (E2 == 8'b0000_0000) ? {1'b0, F2} : {1'b1, F2};
+            M1 = {1'b1, F1};
+            M2 = {1'b1, F2};
 
             // Exponent calculation
             E_result = E1 - E2 + 127 - 1;
@@ -66,12 +65,31 @@ module Divider (
             
             M_Div_25bit = {1'b0, M_div}; //최상위 비트는 오버플로우 검출용, 최하위비트는 module Divider
             
-            // Rounding logic based on rounding mode
+            // 라운딩 처리
             case (round_mode)
-                2'b00: if (M_div_ext[23]) M_div = M_div + 1; // Round to nearest even
-                2'b01: if (S_result == 1 && M_div_ext[23]) M_div = M_div + 1; // Round toward negative infinity
-                2'b10: if (S_result == 0 && M_div_ext[23]) M_div = M_div + 1; // Round toward positive infinity
-                2'b11: if (M_div_ext[23] && (M_div_ext[22] || |M_div_ext[21:0])) M_div = M_div + 1; // Round to nearest
+                2'b00: begin // Round towards +∞
+                    if (S_result == 0 && M_Div_25bit == 1) begin
+                        M_Div_25bit = M_Div_25bit + 1;
+                    end
+                end
+                2'b01: begin // Round towards -∞
+                    if (S_result == 1 && M_Div_25bit == 1) begin
+                        M_Div_25bit = M_Div_25bit + 1;
+                    end
+                end
+                2'b10: begin // Round towards nearest even
+                    if (M_Div_25bit[1:0] == 2'b11) begin
+                        M_Div_25bit = M_Div_25bit + 1;
+                    end
+                end
+                2'b11: begin // Rounding ties away from zero
+                    if (S_result == 0 && M_Div_25bit == 1) begin
+                        M_Div_25bit = M_Div_25bit + 1;
+                    end
+                    else if (S_result == 1 && M_Div_25bit == 1) begin
+                        M_Div_25bit = M_Div_25bit + 1;
+                    end
+                end
             endcase
 
             // Final normalization
