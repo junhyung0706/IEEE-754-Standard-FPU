@@ -11,10 +11,10 @@ module FPU(
     wire errorAdd, overflowAdd, errorSub, overflowSub, errorMul, overflowMul, errorDiv, overflowDiv;
 
     // 연산 모듈 인스턴스화
-    Adder        add0(round_mode, A, B, errorAdd, overflowAdd, resultAdd);
-    Subtractor   sub0(round_mode, A, B, errorSub, overflowSub, resultSub);
-    Multiplier   mul0(round_mode, A, B, errorMul, overflowMul, resultMul);
-    Divider      div0(round_mode, A, B, errorDiv, overflowDiv, resultDiv);
+    Adder        add0(A, B, round_mode, errorAdd, overflowAdd, resultAdd);
+    Subtractor   sub0(A, B, round_mode, errorSub, overflowSub, resultSub);
+    Multiplier   mul0(A, B, round_mode, errorMul, overflowMul, resultMul);
+    Divider      div0(A, B, round_mode, errorDiv, overflowDiv, resultDiv);
 
     // 결과 처리 블록
     always @(posedge clk or posedge reset) begin
