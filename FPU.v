@@ -17,8 +17,8 @@ module FPU(
     Divider      div0(A, B, round_mode, errorDiv, overflowDiv, resultDiv);
 
     // 결과 처리 블록
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
+    always @(posedge clk or negedge reset) begin
+        if (~reset) begin
             error <= 0;
             overflow <= 0;
             Y <= 0;
