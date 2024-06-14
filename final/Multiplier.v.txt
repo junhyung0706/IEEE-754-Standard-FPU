@@ -1,0 +1,152 @@
+module Multiplier (
+    input [31:0] A,
+    input [31:0] B,
+    input [1:0] round_mode,
+    output reg errorMul,
+    output reg overflowMul,
+    output reg [31:0] resultMul
+);
+
+    // IEEE 754 遺??룞 ?냼?닔?젏 ?삎?떇
+    wire signA = A[31];
+    wire signB = B[31];
+    wire [7:0] expA = A[30:23];
+    wire [7:0] expB = B[30:23];
+    wire [23:0] mantA = (expA == 0) ? 24'b0 : {1'b1, A[22:0]}; // Regard denormalized number as 0
+    wire [23:0] mantB = (expB == 0) ? 24'b0 : {1'b1, B[22:0]};
+
+    // 遺??샇 ?뿰?궛
+    wire resultSign = signA ^ signB;
+
+    // 吏??닔 ?뿰?궛
+    wire [8:0] expSum = (expA && expB) ? expA + expB : 0; // temporary exp sum, 0 if any input is zero
+
+    // 諛곗뿴 怨깆뀍?쓣 ?쐞?븳 媛??닔遺? 怨깆뀍
+    reg [47:0] mantMul;
+    integer i;
+    always @(*) begin
+        mantMul = 48'b0;
+        for (i = 0; i < 24; i = i + 1) begin
+            if (mantB[i])
+                mantMul = mantMul + (mantA << i);
+        end
+    end
+
+    // ?젙?긽?솕
+    //reg [22:0] mantissa;
+    reg [24:0] mantissa;
+    reg [8:0] exponent;
+    reg rounding_bit;
+    always @(*) begin
+    /*
+        if (mantMul[47]) begin
+            mantissa = mantMul[46:24];
+            //rounding_bit = mantMul[23];
+            if(expSum >= 127) begin // Underflow Check
+                exponent = expSum - 126;
+            end else begin
+                exponent = 0;
+            end
+        end else begin
+        
+            mantissa = mantMul[45:23];
+            //rounding_bit = mantMul[22];
+            if(expSum >= 128) begin // Underflow Check
+                exponent = expSum - 127;
+            end else begin
+                exponent = 0;
+            end
+        end
+    
+
+
+///////////////////////////////rounding_added/////////////////////////////////////////////
+            if(mantissa[22]) begin  
+                rounding_bit = mantissa[0];
+                if(rounding_bit) begin
+                    case (round_mode)
+                        2'b00: begin 
+                            if(resultSign) mantissa = mantissa;  
+                            else mantissa = mantissa + 1;
+                        end    
+                        2'b01:  begin 
+                            if(resultSign) mantissa = mantissa + 1;  
+                            else mantissa = mantissa;
+                        end
+                        2'b10: begin               
+                            if (mantissa[0]) mantissa = mantissa + 1;   
+                            else mantissa = mantissa;
+                        end
+                        2'b11: mantissa = mantissa + 1;
+                    endcase
+                end
+                else mantissa = mantissa;
+            end 
+            else mantissa = mantissa;
+            */
+        mantissa = mantMul[47:23];  
+        if(mantMul[47]) begin  //10.xxxx
+            rounding_bit = mantissa[0];
+            mantissa = mantissa >> 1;
+            if(expSum >= 127) exponent = expSum - 126;
+            else exponent = 0;
+            if(rounding_bit) begin
+                case (round_mode)
+                    2'b00: begin 
+                        if(resultSign) mantissa = mantissa;  
+                        else mantissa = mantissa + 1;
+                    end    
+                    2'b01:  begin 
+                        if(resultSign) mantissa = mantissa + 1;  
+                        else mantissa = mantissa;
+                    end
+                    2'b10: begin               
+                        if (mantissa[0]) mantissa = mantissa + 1;   
+                        else mantissa = mantissa;
+                    end
+                    2'b11: mantissa = mantissa + 1;
+                endcase
+            end
+            else mantissa = mantissa;
+        end
+        else begin  //1.xxxx
+            if(expSum >= 128) exponent = expSum - 127;
+            else exponent = 0;
+        end
+///////////////////////////////rounding_added/////////////////////////////////////////////
+    
+    end
+
+    // Exception Handling
+    always @(*) begin
+        if ((expA == 8'hff) || (expB == 8'hff)) begin // Check for NaN or Infinity in inputs
+            if ((expA == 8'hff && mantA[22:0] != 0) || (expB == 8'hff && mantB[22:0] != 0)) begin
+                resultMul = (mantA[22:0] != 0) ? A : B; // Propagate NaN if either input is NaN
+                errorMul = 1;
+                overflowMul = 0;
+            end else if (expA == 8'hff && B[30:23] == 0 || expB == 8'hff && A[30:23] == 0) begin
+                resultMul = {1'b0, 8'hff, 23'h400000}; // Propagate NaN if input is 0 * Infinity
+                errorMul = 1;
+                overflowMul = 0;
+            end else begin
+                resultMul = {resultSign, 8'hff, 23'h0}; // Propagate Infinity if input is nonzero * Infinity
+                errorMul = 0;
+                overflowMul = 1;
+            end
+        end else if (exponent >= 8'hFF) begin
+            resultMul = {resultSign, 8'hFF, 23'b0}; // Overflow
+            overflowMul = 1;
+            errorMul = 0;
+        end else if (exponent == 0) begin
+            resultMul = {resultSign, 31'b0}; // Underflow
+            overflowMul = 0;
+            errorMul = 0;
+        end else begin
+            //resultMul = {resultSign, exponent[7:0], mantissa};
+            resultMul = {resultSign, exponent[7:0], mantissa[22:0]};
+            overflowMul = 0;
+            errorMul = 0;
+        end
+    end
+
+endmodule

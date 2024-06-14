@@ -1,0 +1,129 @@
+module Divider (
+    input [31:0] A,
+    input [31:0] B,
+    input [1:0] round_mode,
+    output reg errorDiv,
+    output reg overflowDiv,
+    output reg [31:0] resultDiv
+);
+
+    // IEEE 754 부동소수점 입력 값 분리
+    wire signA = A[31];
+    wire signB = B[31];
+    wire [7:0] expA = A[30:23];
+    wire [7:0] expB = B[30:23];
+    wire [23:0] mantA = (expA == 0) ? 24'b0 : {1'b1, A[22:0]}; // Normalize A
+    wire [23:0] mantB = (expB == 0) ? 24'b0 : {1'b1, B[22:0]}; // Normalize B
+
+    // 결과 부호
+    wire resultSign = signA ^ signB;
+
+    // 지수 차이 계산
+    wire [8:0] expDiff = 8'd127 + expA - expB; // Add 127 to center the exponent range
+
+    // 유효숫자 나눗셈
+    reg [47:0] mantA_extended;
+    reg [47:0] mantB_extended;
+    reg [47:0] quotient;
+    integer i;
+    always @(*) begin
+        mantA_extended = {24'b0, mantA}; // A를 48비트로 확장
+        mantB_extended = {24'b0, mantB}; // B를 48비트로 확장
+        quotient = 0;
+        for (i = 47; i >= 0; i = i - 1) begin
+            quotient = quotient << 1;
+            if (mantA_extended >= mantB_extended) begin
+                mantA_extended = mantA_extended - mantB_extended;
+                quotient[0] = 1;
+            end
+            mantA_extended = mantA_extended << 1;
+        end
+        quotient = quotient >> 24; // 정규화를 위해 24비트로 자름
+    end
+
+    // 정규화 및 지수 조정
+    //reg [22:0] mantissa;
+    reg [24:0] mantissa;
+    reg [8:0] exponent;
+    reg rounding_bit;
+    always @(*) begin
+        mantissa = quotient[24:0];
+        if (quotient[24]) begin // 10.xxxx 형태인 경우
+            rounding_bit = mantissa[0]; // 반올림 비트 설정
+            mantissa = mantissa >> 1;
+            exponent = expDiff + 1; // 지수 증가
+            if(rounding_bit) begin
+                case (round_mode)
+                    2'b00: begin 
+                        if(resultSign) mantissa = mantissa;  
+                        else mantissa = mantissa + 1;
+                    end    
+                    2'b01:  begin 
+                        if(resultSign) mantissa = mantissa + 1;  
+                        else mantissa = mantissa;
+                    end
+                    2'b10: begin               
+                        if (mantissa[0]) mantissa = mantissa + 1;   
+                        else mantissa = mantissa;
+                    end
+                    2'b11: mantissa = mantissa + 1;
+                endcase
+            end
+        end 
+        else if (quotient[23]) exponent = expDiff; // 1.xxxx 형태인 경우
+        else begin // 0.xxxx 형태인 경우
+            mantissa = quotient[22:0] << 1;
+            exponent = expDiff - 1;
+        end
+ 
+
+        // Check for carry-out in mantissa and adjust exponent
+        if (mantissa[24]) begin
+            mantissa = mantissa >> 1;
+            exponent = exponent + 1;
+        end
+    end
+
+     always @(*) begin
+        if ((expA == 8'hff) || (expB == 8'hff)) begin // Check for NaN or Infinity in inputs
+            if ((expA == 8'hff && mantA[22:0] != 0) || (expB == 8'hff && mantB[22:0] != 0)) begin
+                resultDiv = (mantA[22:0] != 0) ? A : B; // Propagate NaN if either input is NaN
+                errorDiv = 1;
+                overflowDiv = 0;
+            end else if (expA == 8'hff && expB == 8'hff) begin
+                resultDiv = {1'b0, 8'hff, 23'h400000}; // Set to NaN if both inputs are Infinities
+                errorDiv = 1;
+                overflowDiv = 0;
+            end else if (expA == 8'hff) begin
+                resultDiv = {resultSign, 8'hff, 23'h0}; // Proagate Infinity if input is Infinity / nonzero
+                errorDiv = 0;
+                overflowDiv = 1;
+            end else begin
+                resultDiv = {resultSign, 31'b0}; // Set to 0 if input is nonzero / Infinity
+                errorDiv = 0;
+                overflowDiv = 0;
+            end
+        end else if(A[30:23] == 0 && B[30:23] == 0) begin
+            resultDiv = {1'b0, 8'hff, 23'h400000}; // Set to NaN if both inputs are 0
+            errorDiv = 1;
+            overflowDiv = 0;
+        end else if (B[30:23] == 0) begin
+            resultDiv = {resultSign, 8'hff, 23'h0}; // Set to Infinity if input is nonzero / 0
+            errorDiv = 0;
+            overflowDiv = 1;
+        end else if (exponent >= 8'hFF) begin
+            resultDiv = {resultSign, 8'hFF, 23'b0}; // Overflow
+            overflowDiv = 1;
+            errorDiv = 0;
+        end else if (exponent == 0) begin
+            resultDiv = {resultSign, 31'b0}; // Underflow
+            overflowDiv = 0;
+            errorDiv = 0;
+        end else begin
+            resultDiv = {resultSign, exponent[7:0], mantissa[22:0]};
+            overflowDiv = 0;
+            errorDiv = 0;
+        end
+    end
+
+endmodule
